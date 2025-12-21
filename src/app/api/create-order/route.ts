@@ -3,15 +3,12 @@ import Razorpay from 'razorpay';
 
 export async function POST(request: NextRequest) {
   try {
-    console.log('--- RAZORPAY DEBUG ---');
-    console.log('process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID =', process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID);
-    console.log('process.env.RAZORPAY_LIVE_KEY_SECRET exists =', !!process.env.RAZORPAY_KEY_SECRET);
+    console.log('--- RAZORPAY PROD DEBUG ---');
+    console.log('NEXT_PUBLIC_RAZORPAY_KEY_ID =', process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID);
+    console.log('RAZORPAY_KEY_SECRET exists =', !!process.env.RAZORPAY_KEY_SECRET);
 
     if (!process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID || !process.env.RAZORPAY_KEY_SECRET) {
-      return NextResponse.json(
-        { success: false, error: 'Env vars missing on server' },
-        { status: 500 }
-      );
+      throw new Error('Env vars missing on server');
     }
 
     const { amount, courseId, userId } = await request.json();
@@ -23,7 +20,7 @@ export async function POST(request: NextRequest) {
 
     const shortCourseId = String(courseId).slice(0, 10);
     const shortUserId = String(userId).slice(0, 10);
-    
+
     const order = await razorpay.orders.create({
       amount,
       currency: 'INR',
@@ -31,11 +28,26 @@ export async function POST(request: NextRequest) {
       notes: { courseId, userId },
     });
 
+    console.log('Order created (PROD):', order.id);
+
     return NextResponse.json({ success: true, orderId: order.id }, { status: 200 });
   } catch (error: any) {
-    console.error('Order creation error:', error);
+    console.error('Order creation error (PROD):', {
+      message: error?.message,
+      code: error?.code,
+      statusCode: error?.statusCode,
+      description: error?.description,
+      full: error,
+    });
+
+    const msg =
+      error?.description ||
+      error?.message ||
+      error?.code ||
+      'Unknown error (no message from Razorpay)';
+
     return NextResponse.json(
-      { success: false, error: error.message ?? 'Unknown error' },
+      { success: false, error: msg },
       { status: 500 }
     );
   }
