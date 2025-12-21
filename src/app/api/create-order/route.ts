@@ -13,6 +13,9 @@ export async function POST(request: NextRequest) {
 
     const { amount, courseId, userId } = await request.json();
 
+    console.log('Create-order payload (PROD):', { amount, courseId, userId });
+    console.log('Razorpay constructor typeof:', typeof Razorpay);
+
     const razorpay = new Razorpay({
       key_id: process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID,
       key_secret: process.env.RAZORPAY_KEY_SECRET,
