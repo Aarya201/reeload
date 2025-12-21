@@ -17,7 +17,7 @@ export async function POST(request: NextRequest) {
 
     // ✅ VERIFY SIGNATURE - CRITICAL FOR LIVE MODE
     const generated_signature = crypto
-      .createHmac('sha256', process.env.RAZORPAY_LIVE_KEY_SECRET!)
+      .createHmac('sha256', process.env.RAZORPAY_KEY_SECRET!)
       .update(`${razorpay_order_id}|${razorpay_payment_id}`)
       .digest('hex');
 

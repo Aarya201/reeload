@@ -73,7 +73,14 @@ export default function CoursePage() {
     setPaymentError(null);
 
     try {
+      // DEBUG: Log payment details
+      console.log('🔵 Starting payment process...');
+      console.log('Amount (paise):', course.price * 100);
+      console.log('Course ID:', courseId);
+      console.log('User ID:', user.uid);
+
       // Step 1: Create order on backend
+      console.log('📡 Sending order creation request...');
       const orderResponse = await fetch('/api/create-order', {
         method: 'POST',
         headers: {
@@ -88,13 +95,27 @@ export default function CoursePage() {
         }),
       });
 
+      console.log('Response Status:', orderResponse.status);
+      
+      const orderData = await orderResponse.json();
+      console.log('Order Response:', orderData);
+
       if (!orderResponse.ok) {
-        throw new Error('Failed to create order');
+        // ✅ BETTER ERROR MESSAGE
+        const errorMessage = orderData.error || `Failed to create order (Status: ${orderResponse.status})`;
+        console.error('❌ Order creation failed:', errorMessage);
+        throw new Error(errorMessage);
       }
 
-      const orderData = await orderResponse.json();
+      if (!orderData.orderId) {
+        throw new Error('No order ID received from server');
+      }
+
+      console.log('✅ Order created:', orderData.orderId);
 
       // Step 2: Setup Razorpay options - LIVE MODE
+      console.log('🎯 Setting up Razorpay checkout...');
+      
       const options = {
         key: process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID, // ✅ Live Key (rzp_live_xxxxx)
         amount: course.price * 100, // Amount in paise
@@ -114,6 +135,9 @@ export default function CoursePage() {
         // ✅ SUCCESS HANDLER
         handler: async (response: any) => {
           try {
+            console.log('💰 Payment successful! Verifying...');
+            console.log('Payment ID:', response.razorpay_payment_id);
+            
             // Step 3: Verify payment on backend - CRITICAL FOR LIVE MODE
             const verifyResponse = await fetch('/api/verify-payment', {
               method: 'POST',
@@ -132,48 +156,57 @@ export default function CoursePage() {
             });
 
             const verifyData = await verifyResponse.json();
+            console.log('Verification Response:', verifyData);
 
             if (verifyData.success) {
+              console.log('✅ Payment verified! Updating database...');
               // Payment verified - update database
               await updateCourseAndUserData();
               alert('✅ Payment successful! Starting course...');
               router.push(`/watch/${courseId}`);
             } else {
-              setPaymentError('Payment verification failed. Please contact support.');
+              const errorMsg = verifyData.error || 'Payment verification failed';
+              console.error('❌ Verification failed:', errorMsg);
+              setPaymentError(`Verification failed: ${errorMsg}`);
               alert('❌ Payment verification failed');
             }
           } catch (error) {
-            console.error('Verification error:', error);
-            setPaymentError('Error verifying payment');
+            console.error('❌ Verification error:', error);
+            setPaymentError(error instanceof Error ? error.message : 'Error verifying payment');
           }
         },
 
         // ✅ FAILURE HANDLER
         modal: {
           ondismiss: () => {
+            console.log('⚠️ User dismissed payment modal');
             setProcessingPayment(false);
-            setPaymentError('Payment cancelled');
+            setPaymentError('Payment cancelled by user');
           },
         },
       };
 
       // Step 4: Load Razorpay script and open checkout
+      console.log('🚀 Loading Razorpay script...');
       const script = document.createElement('script');
       script.src = 'https://checkout.razorpay.com/v1/checkout.js';
       script.async = true;
       script.onload = () => {
+        console.log('✅ Razorpay script loaded, opening checkout...');
         // @ts-ignore
         const razorpay = new window.Razorpay(options);
         razorpay.open();
       };
       script.onerror = () => {
+        console.error('❌ Failed to load Razorpay script');
         setPaymentError('Failed to load payment gateway');
         setProcessingPayment(false);
       };
       document.body.appendChild(script);
 
     } catch (error: any) {
-      console.error('Payment error:', error);
+      console.error('❌ Payment error:', error.message);
+      console.error('Full error:', error);
       setPaymentError(error.message || 'Payment failed. Please try again.');
       setProcessingPayment(false);
     }
@@ -182,6 +215,8 @@ export default function CoursePage() {
   // ✅ UPDATE FIREBASE AFTER VERIFIED PAYMENT
   const updateCourseAndUserData = async () => {
     try {
+      console.log('🔄 Updating Firebase with payment data...');
+      
       // 1. Add student to course
       const courseRef = ref(db, `courses/${courseId}`);
       const students = course?.students || [];
@@ -189,6 +224,7 @@ export default function CoursePage() {
         students.push(user.uid);
       }
       await update(courseRef, { students });
+      console.log('✅ Student added to course');
 
       // 2. Update creator earnings (67% for creator, 33% for platform)
       const creatorRef = ref(db, `creators/${course?.creatorId}`);
@@ -199,6 +235,7 @@ export default function CoursePage() {
         await update(creatorRef, {
           totalEarnings: currentEarnings + creatorEarnings,
         });
+        console.log('✅ Creator earnings updated: ₹' + creatorEarnings);
       }
 
       // 3. Add course to user's purchases
@@ -211,11 +248,12 @@ export default function CoursePage() {
       await update(viewerRef, {
         purchasedCourseIds: purchasedCourseIds,
       });
+      console.log('✅ Course added to user purchases');
 
       // Update UI
       setIsPurchased(true);
     } catch (error) {
-      console.error('Error updating data:', error);
+      console.error('❌ Error updating data:', error);
     }
   };
 
@@ -314,7 +352,8 @@ export default function CoursePage() {
             {/* Error Message */}
             {paymentError && (
               <div className="mb-6 p-4 bg-red-100 border border-red-400 text-red-700 rounded-lg">
-                ❌ {paymentError}
+                <p className="font-bold mb-2">❌ Payment Error:</p>
+                <p className="text-sm">{paymentError}</p>
               </div>
             )}
 
